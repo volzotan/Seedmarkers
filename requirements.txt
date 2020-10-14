@@ -1,0 +1,7 @@
+scipy
+matplotlib
+pylibdmtx
+ezdxf
+shapely
+svgwrite
+pillow

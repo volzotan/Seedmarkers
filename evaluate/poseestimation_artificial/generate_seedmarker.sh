@@ -1,0 +1,2 @@
+python3 generate.py ../evaluate/poseestimation_artificial/outline_seedmarker_180x90mm.dxf 01234234323433234333 --output seedmarker_180x90.dxf --line-width 4
+python3 generate.py ../evaluate/poseestimation_artificial/outline_seedmarker_90x90mm.dxf 012342343234332343332 --output seedmarker_90x90.dxf --line-width 3

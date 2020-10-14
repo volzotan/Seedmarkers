@@ -1,0 +1,7 @@
+# for sort
+numba
+scikit-learn==0.22.2
+filterpy
+
+# for ArUco calibration
+opencv-contrib-python
