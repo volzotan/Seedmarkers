@@ -5,10 +5,18 @@ import time
 import argparse
 import os
 
-MIN_DEPTH = 2
-MAX_DEPTH = 6
+MIN_DEPTH   = 2
+MAX_DEPTH   = 6
 # MIN_LEAVES = 2
-MAX_WIDTH = 10
+MAX_WIDTH   = 10
+
+MORPHOLOGICAL_OPERATIONS = True
+
+DRAW_POINT_CORRESPONDENCES = False
+DRAW_ONLY_MARKER_CONTOUR = False
+SAVE_OUTPUT_IMAGE = True
+SAVE_DIR    = "detect_output"
+counter     = 0
 
 class Node(object):
 
@@ -325,10 +333,12 @@ def process(image_cap, lhds, descriptor):
     # blurred = cv2.GaussianBlur(gray, (7, 7), 0)
     # edged = cv2.Canny(blurred, 50, 150)
     _, edged = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    # edged = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 101, 2)
 
-    kernel = np.ones((3, 3), np.uint8)
-    edged = cv2.morphologyEx(edged, cv2.MORPH_OPEN, kernel)
-    edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, kernel)
+    if MORPHOLOGICAL_OPERATIONS:
+        kernel = np.ones((5, 5), np.uint8)
+        edged = cv2.morphologyEx(edged, cv2.MORPH_OPEN, kernel)
+        edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, kernel)
 
     edges_for_contour = edged.copy()
 
@@ -344,6 +354,13 @@ def process(image_cap, lhds, descriptor):
         cv2.drawContours(output_img, contours, -1, (0, 255, 0), 1)
 
     total_matches = []
+
+    if SAVE_OUTPUT_IMAGE:
+        global counter
+
+        counter += 1
+        cv2.imwrite(os.path.join(SAVE_DIR, "img_{:05}.jpg".format(counter)), output_img)
+
 
     for tln in top_level_nodes:
 
@@ -392,37 +409,44 @@ def process(image_cap, lhds, descriptor):
 
                         cv2.circle(output_img, (int(ip[0]), int(ip[1])), 5, (255, 0, 0), -1)
 
-                        # cv2.putText(
-                        #     output_img,
-                        #     "{:6.1f}, {:6.1f}".format(ip[0], ip[1]), 
-                        #     (int(ip[0]), int(ip[1])), 
-                        #     font, 
-                        #     fontScale,
-                        #     fontColor,
-                        #     lineType)
+                        if DRAW_POINT_CORRESPONDENCES:
+                            cv2.putText(
+                                output_img,
+                                "{:6.1f}, {:6.1f}".format(ip[0], ip[1]), 
+                                (int(ip[0]), int(ip[1])), 
+                                font, 
+                                fontScale,
+                                fontColor,
+                                lineType)
 
-                        # cv2.putText(
-                        #     output_img,
-                        #     "{:6.1f}, {:6.1f}".format(op[0], op[1]), 
-                        #     (int(ip[0]), int(ip[1])+22), 
-                        #     font, 
-                        #     fontScale,
-                        #     fontColor,
-                        #     lineType)
+                            cv2.putText(
+                                output_img,
+                                "{:6.1f}, {:6.1f}".format(op[0], op[1]), 
+                                (int(ip[0]), int(ip[1])+22), 
+                                font, 
+                                fontScale,
+                                fontColor,
+                                lineType)
 
-                    cv2.aruco.drawAxis(output_img, camera_matrix, dist_coeffs, rvec, tvec, 10)
+                    cv2.aruco.drawAxis(output_img, camera_matrix, dist_coeffs, rvec, tvec, 0.1)
+
+                    if SAVE_OUTPUT_IMAGE:
+                        cv2.imwrite(os.path.join(SAVE_DIR, "img_{:05}.jpg".format(counter)), output_img)
+               
             else:
                 m.add_pose(None, None)
     
     if args.draw_output:
         dim = (int(1920/2), int(1080/2)) #(1920, 1080) 
-        # output_img = cv2.resize(output_img, dim, interpolation = cv2.INTER_AREA)
+        output_img = cv2.resize(output_img, dim, interpolation = cv2.INTER_AREA)
 
         while(True):
             cv2.imshow('Frame', output_img)
 
             if cv2.waitKey(25) & 0xFF == ord('q'):
-                break
+                pass
+
+            break
 
     return total_matches
 
@@ -524,6 +548,8 @@ if __name__ == "__main__":
 
             if "distCoeffs" in data and data["distCoeffs"] is not None:
                 dist_coeffs = np.matrix(data["distCoeffs"])
+    else:
+        print("WARNING: calibration data is missing")
 
     if args.input_image is not None:
         image_cap = cv2.imread(args.input_image, cv2.IMREAD_ANYCOLOR)
