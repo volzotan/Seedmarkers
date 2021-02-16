@@ -34,17 +34,19 @@ LARGEST_CIRCLE_PRECISION    = 0.4 # units = mm
 MIN_FEATURE_SIZE            = 1.2
 LINE_WIDTH                  = 2.4
 OVERSHRINK                  = 2.0 # 2.5
-ROOT_TREE_SHRINK            = LINE_WIDTH
 
 WEIGHTING_DEPTH_FACTOR      = 0.2
 
 LEAFS_AS_CIRLCES            = True
 NO_DUMMY                    = True
+SAFETY_BOUNDARY             = True
 
 EXPORT_DEBUG_IMAGE_SKIP     = 1000
 EXPORT_DEBUG_IMAGE          = True
 EXPORT_DEBUG_CLEAR_IMAGE    = True
+EXPORT_DEBUG_INVERT         = False
 DEBUG_DRAW_VORONOI_CELLS    = True
+DEBUG_DRAW_ERROR_GRAPH      = False
 
 OUTPUT_NAME                 = "{:05}.png"
 OUTPUT_IMAGE_DIMENSIONS     = [1000, 1000]
@@ -85,6 +87,10 @@ class Subtree(object):
         log.info("subtrees: {}".format(["".join(x) for x in self.subtree_names]))
 
         self.boundary = boundary
+
+        self.leaf_center = None
+        self.leaf_radius = None
+
         self.config = config
 
         if type(self.boundary) is MultiPolygon:
@@ -100,10 +106,7 @@ class Subtree(object):
             log.error("boundary too small: {}".format(self.boundary))
             exit(ERROR_INVALID_GEOMETRY)
 
-        if self.depth == 0:
-            shrinkage = ROOT_TREE_SHRINK
-        else:
-            shrinkage = self.config["boundary_shrink"]
+        shrinkage = self.config["boundary_shrink"]
         self.boundary_shrinked = self.boundary.buffer(-OVERSHRINK-shrinkage).buffer(OVERSHRINK)
 
         if type(self.boundary_shrinked) is MultiPolygon:
@@ -449,10 +452,12 @@ class Subtree(object):
             if LEAFS_AS_CIRLCES and self.is_leaf():
 
                 if self.leaf_poly is None:
-                    new_leaf, _, _ = self.get_largest_circle_in_poly(self.boundary, no_shrink=True)
+                    new_leaf, new_center, new_radius = self.get_largest_circle_in_poly(self.boundary, no_shrink=True)
                     if new_leaf is not None:
                         # if new_leaf.is_empty:
                         self.leaf_poly = new_leaf
+                        self.leaf_center = new_center
+                        self.leaf_radius = new_radius
                     else:
                         self.leaf_poly = self.boundary
                 
@@ -601,7 +606,11 @@ class Subtree(object):
                     coords.append(self._transform(x, y, transformation_matrix))
 
                 # root node should be black
-                if depth % 2 == 1:
+                comparison = 1
+                if EXPORT_DEBUG_INVERT:
+                    comparison = 0
+
+                if depth % 2 == comparison:
                     fill = (255, 255, 255)
                 else:
                     fill = (0, 0, 0)
@@ -648,23 +657,24 @@ class Subtree(object):
             draw.text(( 10, 30), "error:", font=font_large, fill=(0, 0, 0))
             draw.text((130, 30), "{:9.7f}".format(error), font=font_large_bold, fill=(0, 0, 0))
 
-            try:
-                self.debug_errors
-            except Exception as e:
-                self.debug_errors = [[10, 60]]
+            if DEBUG_DRAW_ERROR_GRAPH:
+                try:
+                    self.debug_errors
+                except Exception as e:
+                    self.debug_errors = [[10, 60]]
 
-            if self.iteration % 2 == 0:
-                x = 10 + self.iteration
-                y = 120 - (error * 500)       
-                if y < 60:
-                    y = 60
-                self.debug_errors.append([x, y])
+                if self.iteration % 2 == 0:
+                    x = 10 + self.iteration
+                    y = 120 - (error * 500)       
+                    if y < 60:
+                        y = 60
+                    self.debug_errors.append([x, y])
 
-            r = 1
-            for x, y in self.debug_errors:
-                draw.ellipse([x-r, y-r, x+r, y+r], fill=(0, 0, 0))
+                r = 1
+                for x, y in self.debug_errors:
+                    draw.ellipse([x-r, y-r, x+r, y+r], fill=(0, 0, 0))
 
-            draw.line([(10, 120+5), (self.debug_errors[-1][0], 120+5)], width=1, fill=(0, 0, 0))
+                draw.line([(10, 120+5), (self.debug_errors[-1][0], 120+5)], width=1, fill=(0, 0, 0))
 
         # shape
         shape = self.get_shape()
@@ -944,9 +954,8 @@ class Subtree(object):
 
         for l in self.get_leaves():
             desc += "|"
-            _, bestc, bestr = l.get_largest_circle_in_poly(l.boundary)
-            if not None in (bestc, bestr):
-                desc += "{:.2f}:{:.2f}:{:.2f}".format(*bestc, bestr)
+            if l.leaf_center is not None and l.leaf_radius is not None:
+                desc += "{:.2f}:{:.2f}:{:.2f}".format(*l.leaf_center, l.leaf_radius)
             else:
                 desc += "_"
 
@@ -1247,6 +1256,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--no-safety-boundary", 
+        default=False,
+        help="Do not create a safety boundary",
+        action="store_true"
+    )
+
+    parser.add_argument(
         "--reactivision", 
         type=float,
         default=None,
@@ -1321,7 +1337,7 @@ if __name__ == "__main__":
     boundaries = sorted(boundaries, key=attrgetter("area"), reverse=True)
 
     if len(boundaries) == 0:
-        log.error("unable to dervice boundary from DXF file {}".format(args.input))
+        log.error("unable to derive boundary from DXF file {}".format(args.input))
         log.error("DXF file may use incompatible arcs or non polyline elements.")
         exit(ERROR_ILLEGAL_INPUT)
 
@@ -1397,7 +1413,18 @@ if __name__ == "__main__":
         gravity_vector = [math.cos(math.radians(args.reactivision)), math.sin(math.radians(args.reactivision))]
         log.debug("gravity  : {:4.2f} {:4.2f}".format(*gravity_vector))
 
-    root = Subtree(left_heavy_depth_tree, boundary, config, gravity_vector=gravity_vector, cutouts=cutout_list, init_points=artificial_init_points)
+    boundary_root = boundary
+    if not args.no_safety_boundary:
+        boundary_root = boundary.buffer(-OVERSHRINK-config["line_width"]).buffer(OVERSHRINK)
+
+        if type(boundary_root) is MultiPolygon:
+            raise Exception("""
+                Outline after shrinking is a MultiPolygon. The input outline contains bridges that are thinner than {}. 
+                When creating a safety boundary, this results in splitting the boundary into multiple parts.
+                Increase bridge width to prevent this.""".format(OVERSHRINK+config["line_width"])
+            )
+
+    root = Subtree(left_heavy_depth_tree, boundary_root, config, gravity_vector=gravity_vector, cutouts=cutout_list, init_points=artificial_init_points)
 
     # compute transformation matrix for image outputs
 
@@ -1463,7 +1490,7 @@ if __name__ == "__main__":
             if depth % 2 == 1:
                 continue
             
-            DISTANCE = 0.3
+            HEXAGON_DISTANCE = 0.5
 
             minx, miny, maxx, maxy = poly_simplified.bounds
             width = maxx-minx
@@ -1471,14 +1498,14 @@ if __name__ == "__main__":
 
             # Circles
 
-            # num_x = width / (args.hexagon_fill_radius*2 + DISTANCE)
-            # num_y = height / (args.hexagon_fill_radius*2 + DISTANCE)
+            # num_x = width / (args.hexagon_fill_radius*2 + HEXAGON_DISTANCE)
+            # num_y = height / (args.hexagon_fill_radius*2 + HEXAGON_DISTANCE)
 
             # for i in range(0, int(num_x)):
             #     for j in range(0, int(num_y)):
 
-            #         x = minx + (args.hexagon_fill_radius*2 + DISTANCE) / 2 + (args.hexagon_fill_radius*2 + DISTANCE) * i 
-            #         y = miny + (args.hexagon_fill_radius*2 + DISTANCE) / 2 + (args.hexagon_fill_radius*2 + DISTANCE) * j
+            #         x = minx + (args.hexagon_fill_radius*2 + HEXAGON_DISTANCE) / 2 + (args.hexagon_fill_radius*2 + HEXAGON_DISTANCE) * i 
+            #         y = miny + (args.hexagon_fill_radius*2 + HEXAGON_DISTANCE) / 2 + (args.hexagon_fill_radius*2 + HEXAGON_DISTANCE) * j
 
             #         h = Point([x, y]).buffer(args.hexagon_fill_radius)
             #         h = poly_simplified.intersection(h)
@@ -1492,8 +1519,8 @@ if __name__ == "__main__":
 
             # Hexagons
 
-            w = math.sqrt(3) * (args.hexagon_fill_radius + DISTANCE)
-            h = 2 * (args.hexagon_fill_radius + DISTANCE)
+            w = math.sqrt(3) * (args.hexagon_fill_radius + HEXAGON_DISTANCE)
+            h = 2 * (args.hexagon_fill_radius + HEXAGON_DISTANCE)
             num_x = width / w + 1
             num_y = height / (0.75*h) + 1
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-INPUT_DIR="example_shapes"
+INPUT_DIR="example_shapes_video"
 EXTENSION=".dxf"
 
 TREE=01234433332332323
