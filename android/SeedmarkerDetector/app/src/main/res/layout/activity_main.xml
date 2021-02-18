@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorPrimary"
+    android:backgroundTint="@color/colorPrimary"
+    tools:context=".MainActivity">
+
+    <!--
+    <de.uniweimar.mm.seedmarkerdetector.FixedAspectRatioFrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_alignParentLeft="true"
+        android:layout_weight="0"
+        android:id="@+id/aspectratio_layout">
+
+        <TextureView
+            android:id="@+id/textureView"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:text="texture_view" />
+
+    </de.uniweimar.mm.seedmarkerdetector.FixedAspectRatioFrameLayout>
+    -->
+
+
+    <androidx.camera.view.PreviewView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/previewView" />
+
+
+    <de.uniweimar.mm.seedmarkerdetector.DrawSurface
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:id="@+id/drawSurface"
+        android:text="draw" />
+
+
+</RelativeLayout>
