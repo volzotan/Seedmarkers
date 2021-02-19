@@ -30,7 +30,7 @@ See the [paper](https://dl.acm.org/doi/10.1145/3430524.3440645) for more details
 
 ## Detection
 
-For 9-DoF pose estimation camera calibration data is required. You can obtain that with openCV and copy the matrices to a JSON file (see `detect/calibration_pixel3a.json` for the structure).
+For 6-DoF pose estimation camera calibration data is required. You can obtain that with openCV and copy the matrices to a JSON file (see `detect/calibration_pixel3a.json` for the structure).
 Run `detect/detection_video.sh` for a short demo.
 
 `detect/detection.py --help` will print an overview of the command line arguments.
